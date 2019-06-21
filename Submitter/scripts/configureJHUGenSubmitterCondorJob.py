@@ -21,15 +21,16 @@ class BatchManager:
       self.parser = OptionParser()
 
       self.parser.add_option("--batchqueue", type="string", help="Batch queue")
-      self.parser.add_option("--batchscript", type="string", help="Name of the HTCondor script")
+      self.parser.add_option("--batchscript", type="string", help="Name of the HTCondor executable")
       self.parser.add_option("--tarfile", type="string", help="Name of the tar file to upload")
-      self.parser.add_option("--outdir", type="string", help="Name of the output directory")
+      self.parser.add_option("--outdir", type="string", help="Name of the job output directory")
+      self.parser.add_option("--condorsite", type="string", help="Name of the HTCondor site")
+      self.parser.add_option("--condoroutdir", type="string", help="Name of the HTCondor output directory")
       self.parser.add_option("--outlog", type="string", help="Name of the output log file")
       self.parser.add_option("--errlog", type="string", help="Name of the output error file")
 
-      self.parser.add_option("--script", type="string", help="Name of the script to run")
-      self.parser.add_option("--fcn", type="string", help="Name of the function in the script")
-      self.parser.add_option("--fcnargs", type="string", help="The arguments of the function")
+      self.parser.add_option("--executable", "--exe", type="string", help="Name of the executable to run")
+      self.parser.add_option("--command", type="string", help="The arguments of the function")
 
       self.parser.add_option("--dry", dest="dryRun", action="store_true", default=False, help="Do not submit jobs, just set up the files")
       self.parser.add_option("--interactive", dest="interactive", action="store_true", default=False, help="Do not submit jobs; run them interactively")
@@ -42,29 +43,30 @@ class BatchManager:
          "batchscript",
          "tarfile",
          "outdir",
+         "condorsite",
+         "condoroutdir",
          "outlog",
          "errlog",
-         "script",
-         "fcn",
-         "fcnargs"
+         "executable",
+         "command"
       ]
       for theOpt in optchecks:
          if not hasattr(self.opt, theOpt) or getattr(self.opt, theOpt) is None:
             sys.exit("Need to set --{} option".format(theOpt))
 
-      if self.opt.outdir.startswith("./"):
-         self.opt.outdir = self.opt.outdir.replace(".",os.getcwd(),1)
+      # Get abolute path
+      self.opt.outdir = os.path.abspath(self.opt.outdir)
 
-      if not os.path.isfile(self.opt.script):
-         sys.exit("Script {} does not exist. Exiting...".format(self.opt.script))
+      if not os.path.isfile(self.opt.executable):
+         sys.exit("Script {} does not exist. Exiting...".format(self.opt.executable))
 
       if not os.path.isfile(self.opt.batchscript):
-         print "Batch script does not exist in current directory, will search for CMSSW_BASE/bin"
+         print "Batch executable does not exist in current directory, will search for CMSSW_BASE/bin"
          if os.path.isfile(os.getenv("CMSSW_BASE")+"/bin/"+os.getenv("SCRAM_ARCH")+"/"+self.opt.batchscript):
             self.opt.batchscript = os.getenv("CMSSW_BASE")+"/bin/"+os.getenv("SCRAM_ARCH")+"/"+self.opt.batchscript
-            print "\t- Found the batch script"
+            print "\t- Found the batch executable"
          else:
-            sys.exit("Batch script {} does not exist. Exiting...".format(self.opt.batchscript))
+            sys.exit("Batch executable {} does not exist. Exiting...".format(self.opt.batchscript))
 
       for theOpt in optchecks:
          print "Option {}={}".format(theOpt,getattr(self.opt, theOpt))
@@ -77,31 +79,38 @@ class BatchManager:
       currentdir = os.getcwd()
       currentCMSSWBASESRC = os.getenv("CMSSW_BASE")+"/src/" # Need the trailing '/'
       currendir_noCMSSWsrc = currentdir.replace(currentCMSSWBASESRC,'')
-      if self.opt.fcnargs is not None:
-         self.opt.fcnargs = translateFromPythonToShell(self.opt.fcnargs)
+      if self.opt.command is not None:
+         self.opt.command = translateFromPythonToShell(self.opt.command)
 
-      scriptargs = {
+      scramver = os.getenv("SCRAM_ARCH")
+      singularityver = "cms:rhel6"
+      if "slc7" in scramver:
+         singularityver = "cms:rhel7"
+
+      condorscriptargs = {
          "home" : os.path.expanduser("~"),
          "uid" : os.getuid(),
          "batchScript" : self.opt.batchscript,
+         "CONDORSITE" : self.opt.condorsite,
+         "CONDOROUTDIR" : self.opt.condoroutdir,
          "outDir" : self.opt.outdir,
          "outLog" : self.opt.outlog,
          "errLog" : self.opt.errlog,
          "QUEUE" : self.opt.batchqueue,
          "CMSSWVERSION" : os.getenv("CMSSW_VERSION"),
-         "SCRAMARCH" : os.getenv("SCRAM_ARCH"),
+         "SCRAMARCH" : scramver,
+         "SINGULARITYVERSION" : singularityver,
          "SUBMITDIR" : currendir_noCMSSWsrc,
          "TARFILE" : self.opt.tarfile,
-         "RUNFILE" : self.opt.script,
-         "FCN" : self.opt.fcn,
-         "FCNARGS" : self.opt.fcnargs
+         "RUNFILE" : self.opt.executable,
+         "RUNCMD" : self.opt.command
       }
 
-      scriptcontents = """
+      condorscriptcontents = """
 universe={QUEUE}
 +DESIRED_Sites="T2_US_UCSD"
 executable              = {batchScript}
-arguments               = {CMSSWVERSION} {SCRAMARCH} {SUBMITDIR} {TARFILE} {RUNFILE} {FCN} {FCNARGS}
+arguments               = {CMSSWVERSION} {SCRAMARCH} {SUBMITDIR} {TARFILE} {RUNFILE} {RUNCMD} {CONDORSITE} {CONDOROUTDIR}
 Initialdir              = {outDir}
 output                  = {outLog}.$(ClusterId).$(ProcId).txt
 error                   = {errLog}.$(ClusterId).$(ProcId).err
@@ -120,16 +129,16 @@ notification=Never
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT_OR_EVICT
 Requirements = ((HAS_SINGULARITY=?=True) && (HAS_CVMFS_cms_cern_ch =?= true)) || (regexp("(uaf-[0-9]{{1,2}}|uafino)\.", TARGET.Machine) && !(TARGET.SlotID>(TotalSlots<14 ? 3:7) && regexp("uaf-[0-9]", TARGET.machine)))
-
++SingularityImage = "/cvmfs/singularity.opensciencegrid.org/bbockelm/{SINGULARITYVERSION}"
 
 queue
 
 """
-      scriptcontents = scriptcontents.format(**scriptargs)
+      condorscriptcontents = condorscriptcontents.format(**condorscriptargs)
 
       self.condorScriptName = "condor.sub"
       condorScriptFile = open(self.opt.outdir+"/"+self.condorScriptName,'w')
-      condorScriptFile.write(scriptcontents)
+      condorScriptFile.write(condorscriptcontents)
       condorScriptFile.close()
 
 
