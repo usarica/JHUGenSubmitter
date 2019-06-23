@@ -1,7 +1,6 @@
 <flags ADD_SUBDIR="1" />
 
 <flags CPPFLAGS="-Wall -Wextra -Wpedantic -I$(CMSSW_BASE)/src/JHUGenSubmitter/Submitter/interface/ -I$(CMSSW_BASE)/src/CMSDataTools/AnalysisTree/interface/" />
-<flags CPPDEFINES="_stop1lpkgpathstr_='TString(std::getenv(xstr_lit(CMSSW_BASE)))+TString(xstr_lit(/src/JHUGenSubmitter/Submitter/))'" />
 
 <use name="root"/>
 <use name="rootmath"/>
