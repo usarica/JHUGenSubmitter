@@ -3,6 +3,7 @@
 __init__.py
 **/Pdfdata
 **/output
+**/tmp.sh
 **/br.sm1
 **/br.sm2
 **/ffwarn.dat

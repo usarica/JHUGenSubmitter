@@ -377,19 +377,34 @@ for fargo in "${fcnarglist[@]}";do
     if [[ "$fcnargname" == *"/"* ]];then
       THEDATADIR="${fcnargname%/*}"
     fi
-    echo "The data file directory is ${THEDATADIR}."
-    echo "The data file base name is ${THEDATAFILECORE}."
+    echo "Data file directory: ${THEDATADIR}"
+    echo "Data file base name: ${THEDATAFILECORE}"
   fi
 done
 if [[ ! -z ${THEDATAFILECORE+x} ]];then
   echo "Searching for ${THEDATADIR}/${THEDATAFILECORE} derivatives."
-  for THEDATAFILE in $(ls ${THEDATADIR} | grep -e ${THEDATAFILECORE});do
-    copyFromCondorToSite.sh ${THEDATADIR} ${THEDATAFILE} ${CONDORSITE} ${CONDOROUTDIR}
+  current_transfer_dir=$(pwd)
+  tarcontents=""
+  for THEDATAFILE in $(ls ${THEDATADIR} | grep -e ${THEDATAFILECORE} | grep -e ".lhe" -e ".CSmax.bin" -e "gridinfo.txt" -e ".grid" -e "commandline");do
+    if [[ -z "$tarcontents" ]];then
+      tarcontents="${THEDATADIR}/${THEDATAFILE}"
+    else
+      tarcontents="${tarcontents} ${THEDATADIR}/${THEDATAFILE}"
+    fi
+  done
+  transfer_tarname="${THEDATAFILECORE}.tar"
+  tar Jcvf $transfer_tarname $tarcontents
+  TARCMD_STATUS=$?
+  if [ $TARCMD_STATUS != 0 ];then
+    echo "Tar file $transfer_tarname could not be created. The tar ball was supposed to contain"
+    echo "=> < "$tarcontents" >"
+  else
+    copyFromCondorToSite.sh ${current_transfer_dir} ${transfer_tarname} ${CONDORSITE} ${CONDOROUTDIR}
     TRANSFER_STATUS=$?
     if [ $TRANSFER_STATUS != 0 ]; then
       echo " - Transfer crashed with exit code ${TRANSFER_STATUS}"
     fi
-  done
+  fi
 fi
 ##############
 

@@ -1,11 +1,6 @@
 #!/bin/bash
 
 chkdir=$1
-let multiprod=1
-if [[ "$2" != "" ]];then
-  let multiprod=$2
-fi
-
 
 let nOK=0
 let nCOPYFAIL=0
@@ -20,51 +15,39 @@ for d in $(ls ./); do
     continue
   fi
 
-  let countOK=0
-  let dirok=1
-  let nsubjobs=0
+  let dirok=0
+  let ncpfail=0
+  let nlogfiles=0
+  runstring=""
   for logfilename in $(ls ./$d/Logs | grep -e "log_"); do
-    let nsubjobs=$nsubjobs+1
-
-    res=$(grep -e "File generation was successful" $d/Logs/$logfilename)
-    res2=$(grep -e "Copied successfully" $d/Logs/$logfilename)
-
-    if [[ ! -z $res ]];then
-      if [[ ! -z $res2 ]];then
-        res3=$(grep -e "Running: env -i " $d/Logs/$logfilename)
-        res3=${res3//*"gsiftp://gftp.t2.ucsd.edu"}
-        if [[ -s $res3 ]];then
-          echo $d" ran successfully"
-          let nOK=$nOK+1
-          let countOK=$countOK+1
-        else
-          echo $d" ran successfully, but the file does not exist!"
-          let nFILEDNE=$nFILEDNE+1
-          let dirok=0
-        fi
-      else
-        echo $d" file ok but copy failed"
-        let nCOPYFAIL=$nCOPYFAIL+1
-        let dirok=0
-      fi
-    elif [ -s $d/Logs/$logfilename ];then
-      echo $d" failed"
-      let nFAIL=$nFAIL+1
-      let dirok=0
-    else
-      echo $d" status is not yet determined"
-      let nUNKNOWN=$nUNKNOWN+1
-      let dirok=0
+    if [[ -s ./$d/Logs/$logfilename ]];then
+      runstring="$runstring ./$d/Logs/$logfilename"
+      let nlogfiles=$nlogfiles+1
     fi
-
   done
+  
+  if [[ -z $runstring ]];then
+    echo "$d status is unknown."
+    let nUNKNOWN=$nUNKNOWN+1
+  else
+    if [[ $nlogfiles -gt 1 ]];then
+      echo "$d has $nlogfiles log files!"
+    fi
+    runcmd="CheckJHUGenSubmissionLogFile$runstring"
+    runoutput=("$(eval $runcmd)")
+    for rout in ${runoutput[@]};do
+      if [[ "$rout" == *"Failed"* ]];then
+        let ncpfail=$ncpfail+1
+      fi
+    done
 
-  if [[ $countOK -gt 0 ]] && [[ $dirok -eq 0 ]];then
-    if [[ $multiprod -eq 1 ]];then
-      echo $d" has multiple submissions with $countOK / $nsubjobs success rate, but the folder will be treated as if it failed."
+    if [[ $ncpfail -gt 0 ]];then
+      echo "$d failed."
+      let nFAIL=$nFAIL+1
     else
-      echo $d" has multiple submissions with $countOK / $nsubjobs success rate, but the user specified the folders to be treated as single jobs."
+      echo "$d is successful."
       let dirok=1
+      let nOK=$nOK+1
     fi
   fi
 
@@ -75,6 +58,9 @@ for d in $(ls ./); do
     if [[ $? -eq 0 ]];then
       echo "- Compressed successfully, so removing the directory"
       rm -rf $d
+    else
+      echo "- Compression failed!"
+      rm -f $TARFILE
     fi
   fi
 

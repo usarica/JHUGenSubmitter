@@ -8,5 +8,5 @@
 <use name="CMSDataTools/AnalysisTree"/>
 <use name="JHUGenSubmitter/Submitter"/>
 
-<bin file="CheckLogFile.cc" name="CheckLogFile">
+<bin file="CheckJHUGenSubmissionLogFile.cc" name="CheckJHUGenSubmissionLogFile">
 </bin>

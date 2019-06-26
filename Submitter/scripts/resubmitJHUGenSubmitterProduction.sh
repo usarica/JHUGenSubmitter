@@ -11,8 +11,8 @@ for f in $(find $chkdir -name condor.sub); do
   if [[ ! -z $prevjob ]];then
     prevjob=${prevjob//".log"}
     tar Jcf "prior_record.${prevjob}.tar" Logs/* "${prevjob}.log" --exclude={*.tar}
-    rm "${prevjob}.log"
-    rm Logs/*
+    rm -f "${prevjob}.log"
+    rm -f Logs/*
   else
     echo "Could not identify the prior job number in folder $d"
   fi
